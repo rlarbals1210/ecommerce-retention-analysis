@@ -1,0 +1,21 @@
+# data (원본은 외장 SSD 참조, 로컬엔 절대 커밋하지 않음)
+data/
+*.csv
+*.csv.gz
+*.parquet
+
+# jupyter
+.ipynb_checkpoints/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+*.egg-info/
+
+# os
+.DS_Store
+
+# reports 산출물 중 대용량은 제외하되 figures는 포함 (원하면 조정)
