@@ -19,3 +19,6 @@ env/
 .DS_Store
 
 # reports 산출물 중 대용량은 제외하되 figures는 포함 (원하면 조정)
+
+# 프로젝트 지시서 (레포 히스토리에는 남지만 앞으로는 추적 안 함)
+CLAUDE.md
