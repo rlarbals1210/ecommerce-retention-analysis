@@ -1,9 +1,10 @@
--- REES46 월별 코호트 잔존율 재현 쿼리 (DuckDB)
+-- REES46 월별 CSV에서 월별 코호트 잔존율을 재현하는 DuckDB 쿼리.
+-- 실행 예: python src/run_cohort_sql.py --glob "/path/to/2019-*.csv"
 WITH monthly_activity AS (
     SELECT DISTINCT
         user_id,
-        CAST(date_trunc('month', event_time) AS DATE) AS activity_month
-    FROM read_parquet($event_glob)
+        CAST(date_trunc('month', CAST(event_time AS TIMESTAMP)) AS DATE) AS activity_month
+    FROM read_csv_auto($event_files, header = true, union_by_name = true)
 ),
 cohorted AS (
     SELECT

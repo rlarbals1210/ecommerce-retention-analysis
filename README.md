@@ -15,7 +15,7 @@
 ## 데이터
 - 출처: Kaggle 공개 데이터셋 [eCommerce behavior data from multi category store](https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store) — [REES46 Marketing Platform](https://rees46.com/) 제공
 - 기간: 2019-10 ~ 2020-04 (월별 CSV 7개, 이벤트 약 2.85억 건 / 총 약 56GB)
-- 원본은 로컬 외부 저장 장치에서 **읽기 전용으로 참조**하며 저장소에는 포함하지 않는다. 경로는 하드코딩하지 않고 `config.py`의 `DATA_DIR`로 주입한다.
+- 원본은 로컬 외부 저장 장치에서 **읽기 전용으로 참조**하며 저장소에는 포함하지 않는다. 경로는 환경변수 `ECOM_DATA_DIR`로 주입하고, 미설정 시 `data/raw/`를 사용한다.
 - 스키마 (9개 컬럼):
 
 | 컬럼 | 설명 |
@@ -42,8 +42,8 @@ EDA 결과 보유한 7개월 데이터 전체에 `remove_from_cart` 이벤트가
 대신 "장바구니에는 담았지만 같은 세션에서 구매로 이어지지 않은 비율"로 장바구니 이탈을
 우회 측정.)
 - **이탈(churn) 정의**: 마지막 활동 이후 N일 무활동을 이탈로 정의. 04_churn_features에서
-7개월 전체 재방문 간격을 재검증해 **N = 30일로 확정**했다 (90번째 percentile인 35일에
-근접한 라운드 넘버 + 이커머스에서 통용되는 "30일 비활성=이탈" 룰과 부합).
+7개월 전체 재방문 간격을 재검증해 **N = 30일로 설정**했다 (90번째 percentile인 35일에
+가깝고 운영 시점에서 해석하기 쉬운 기준).
 `config.py`의 `CHURN_INACTIVITY_DAYS = 30`.
 - **우측 절단(right-censoring) 처리**: 데이터 종료일 근처에 유입된 유저는 "아직 이탈할
 시간이 없었을 뿐"이므로 이탈 여부를 확정할 수 없다. 종료일에서 30일을 뺀 시점을 기준으로
@@ -70,12 +70,17 @@ ecommerce-retention-analysis/
 │   ├── 03_funnel.ipynb            # view→cart→purchase 퍼널
 │   ├── 04_churn_features.ipynb    # 이탈 정의·우측 절단·RFM 피처
 │   └── 05_ab_test_design.ipynb    # 리텐션 캠페인 A/B 설계 문서
+├── sql/
+│   └── cohort_retention.sql        # DuckDB 월별 코호트 재현 쿼리
 ├── src/
 │   ├── __init__.py
 │   ├── load.py                    # 메모리 효율적 로딩·dtype 최적화·샘플링
 │   ├── cohort.py                  # 코호트 잔존율 계산
 │   ├── funnel.py                  # 퍼널 전환율 계산
-│   └── features.py                # 이탈 피처 엔지니어링
+│   ├── features.py                # 이탈 피처 엔지니어링
+│   └── run_cohort_sql.py          # CSV glob을 받아 SQL 실행
+├── docs/
+│   └── ab_test_design.md          # 공개용 A/B 사전 설계안
 └── reports/
     └── figures/                   # 노트북에서 저장하는 시각화 결과물
 ```
@@ -108,20 +113,32 @@ ecommerce-retention-analysis/
   - 이탈률: 평가 가능한 유저 1,353만 명 중 **82.3%가 이탈**로 확정
   - 구매 경험 여부가 재방문을 가름: 재방문(retained) 유저의 31.5%가 구매 경험이 있는 반면 이탈(churned) 유저는 10.3%에 그침 → 위험 세그먼트를 재방문 빈도뿐 아니라 **구매 경험 여부로도 나눠야 함**을 시사
   - 생성 피처: `status`(churned / retained / censored), `recency_days`, `active_days`, `active_months`, `purchase_count`, `purchase_days`, `total_spend`, `is_buyer`, `repeat_buyer`, `cohort_month`
-- [ ] 05_ab_test_design: 진행 중 — RFM 위험 세그먼트 대상 리텐션 캠페인 A/B 설계
-  - 대상 세그먼트: 위험군 중 구매 경험자(`is_buyer=true`) — 04의 재방문율 3배 차이에 근거
-  - 가설: 이탈 임박(recency 20~30일) 구매 경험자에게 개입하면 30일 재방문율이 상승한다
-  - 지표: 30일 재방문율(primary) / 구매 전환율·객단가(secondary) / 이탈률(guardrail)
-  - 성공 기준과 표본 크기는 측정 전에 사전 정의 (분석 후 기준을 맞추지 않기 위함)
+- [x] 05_ab_test_design: Recency 15~29일 위험군 대상 리텐션 캠페인 사전 설계안 공개
+  - 기준 시점 2020-03-31에서 위험군을 다시 산출해 결과 정보를 사용한 순환논리를 차단
+  - 위험군 전체를 구매 경험 여부(`is_buyer`)로 층화한 뒤 사용자 단위 무작위 배정
+  - 지표: 30일 재방문율(primary) / 구매율·객단가(secondary) / 수신거부율·할인비용·contribution margin(guardrail)
+  - alpha 0.05, power 0.80, MDE 절대 +5%p. 그룹당 필요 표본은 1,152~1,568명
+  - 실제 캠페인 결과가 아니라 공개 데이터에 기반한 **사전 설계안**
 
 ## 한계
 - 단일 스토어의 공개 데이터라 일반화에 한계가 있다.
 - 실제 실험을 집행할 수 없어 A/B는 **설계 단계까지**만 다룬다.
-- 2019-10 ~ 2019-11 구간은 cart 이벤트 로깅이 불안정한 것으로 보여 해당 기간의 퍼널·코호트 지표는 다른 달보다 신뢰도가 낮다.
+- 2019-10 ~ 2019-11 구간은 cart 이벤트 로깅이 불안정한 것으로 보여 해당 기간이 포함된 cart 관련 퍼널 지표는 방향성으로만 해석한다.
 
 ## 실행 환경
 
 ```bash
 pip install -r requirements.txt
+export ECOM_DATA_DIR="/path/to/monthly-csv-directory"
 jupyter notebook
 ```
+
+월별 CSV에서 DuckDB SQL 코호트 결과를 재현하려면:
+
+```bash
+python src/run_cohort_sql.py \
+  --glob "/path/to/monthly-csv-directory/*.csv" \
+  --out data/processed/cohort_retention.csv
+```
+
+A/B 테스트의 대상·표본 크기·성공 기준은 [`docs/ab_test_design.md`](docs/ab_test_design.md)에 정리했다.
