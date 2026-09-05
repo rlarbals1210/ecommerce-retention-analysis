@@ -75,9 +75,7 @@ ecommerce-retention-analysis/
 ├── src/
 │   ├── __init__.py
 │   ├── load.py                    # 메모리 효율적 로딩·dtype 최적화·샘플링
-│   ├── cohort.py                  # 코호트 잔존율 계산
-│   ├── funnel.py                  # 퍼널 전환율 계산
-│   ├── features.py                # 이탈 피처 엔지니어링
+│   └── run_cohort_sql.py          # sql/cohort_retention.sql 실행 래퍼
 │   └── run_cohort_sql.py          # CSV glob을 받아 SQL 실행
 ├── docs/
 │   └── ab_test_design.md          # 공개용 A/B 사전 설계안
