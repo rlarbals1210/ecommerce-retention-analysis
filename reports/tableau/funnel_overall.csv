@@ -1,4 +1,4 @@
-﻿step_order,stage,sessions,pct_of_view,step_conversion
-1,view,90305003,1.0,1.0
-2,cart,10968323,0.121459,0.121459
-3,purchase,4898121,0.05424,0.44657
+﻿step_order,stage,sessions,pct_of_total_sessions,share_of_parent_set
+1,all_sessions,90305003,1.0,1.0
+2,cart_present,10968323,0.12145864166573363,0.12145864166573363
+3,cart_and_purchase,4898121,0.054239752364550614,0.44656972629270675
