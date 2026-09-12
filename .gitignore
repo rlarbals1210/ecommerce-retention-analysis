@@ -14,6 +14,7 @@ __pycache__/
 venv/
 env/
 *.egg-info/
+.env
 
 # os
 .DS_Store
@@ -26,6 +27,7 @@ env/
 
 # 프로젝트 지시서 (레포 히스토리에는 남지만 앞으로는 추적 안 함)
 CLAUDE.md
+AGENTS.md
 
 # Small, reproducible analysis summaries; no user-level data.
 !reports/ab_design_summary.csv

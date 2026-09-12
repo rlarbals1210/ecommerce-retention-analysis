@@ -5,7 +5,13 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).resolve().parent
+
+# 로컬 전용 값(예: SSD 마운트 경로)은 .env에 저장하고 여기서 읽어들인다.
+# .env는 .gitignore 처리되어 있어 사람마다 다른 경로를 코드 변경 없이 반영할 수 있다.
+load_dotenv(PROJECT_ROOT / ".env")
 
 # ---------------------------------------------------------------------------
 # 원본 데이터 (외장 SSD, 읽기 전용 — 절대 수정/이동/복사 금지)
