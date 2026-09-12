@@ -78,3 +78,6 @@ EVENT_TYPES = ["view", "cart", "remove_from_cart", "purchase"]
 CHURN_INACTIVITY_DAYS = 30
 
 RANDOM_SEED = 42
+
+# Existing recency cache uses UTC calendar days through this date.
+AB_REFERENCE_DATE = "2020-03-31"

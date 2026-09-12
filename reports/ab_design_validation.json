@@ -1,0 +1,39 @@
+{
+  "reference_date": "2020-03-31",
+  "timezone": "UTC",
+  "feature_end_exclusive": "2020-04-01T00:00:00Z",
+  "outcome_end_exclusive": "2020-05-01T00:00:00Z",
+  "pre_reference_buyers_all_users": 1744364,
+  "risk_users": 2200340,
+  "risk_returned_users": 571010,
+  "reclassified_future_only_buyers": 32583,
+  "reclassified_returned_users": 32583,
+  "source_files": [
+    {
+      "name": "2019-Oct.csv",
+      "bytes": 5668612855
+    },
+    {
+      "name": "2019-Nov.csv",
+      "bytes": 9006762395
+    },
+    {
+      "name": "2019-Dec.csv",
+      "bytes": 9357988804
+    },
+    {
+      "name": "2020-Jan.csv",
+      "bytes": 7777991113
+    },
+    {
+      "name": "2020-Feb.csv",
+      "bytes": 7675550422
+    },
+    {
+      "name": "2020-Mar.csv",
+      "bytes": 7823838608
+    }
+  ],
+  "activity_source": "Existing recency_at_reference.parquet (2020-03-31, UTC calendar days)",
+  "outcome_source": "Existing churn_labels.parquet (April activity)"
+}
