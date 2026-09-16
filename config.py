@@ -87,3 +87,12 @@ RANDOM_SEED = 42
 
 # Existing recency cache uses UTC calendar days through this date.
 AB_REFERENCE_DATE = "2020-03-31"
+
+# Recency restoration is isolated from the cache consumed by notebook 05.
+AB_OBSERVATION_START = "2019-10-01"
+RECENCY_REBUILD_DIR = PROC_DIR / "recency_rebuild"
+RECENCY_SAMPLE_SIZE = 1_000
+RECENCY_CHUNKSIZE = 500_000
+RECENCY_VALIDATION_PATH = REPORTS_DIR / "recency_reference_validation.json"
+RECENCY_CANDIDATE_PATH = RECENCY_REBUILD_DIR / "recency_at_reference.candidate.parquet"
+RECENCY_COMPARISON_PATH = REPORTS_DIR / "recency_segment_comparison.csv"

@@ -32,3 +32,4 @@ AGENTS.md
 # Small, reproducible analysis summaries; no user-level data.
 !reports/ab_design_summary.csv
 !reports/cohort_sizes.csv
+!reports/recency_segment_comparison.csv
