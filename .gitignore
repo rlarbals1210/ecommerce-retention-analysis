@@ -33,3 +33,8 @@ AGENTS.md
 !reports/ab_design_summary.csv
 !reports/cohort_sizes.csv
 !reports/recency_segment_comparison.csv
+
+# Post-submission threshold sensitivity: aggregate counts and statistical summaries only.
+!reports/recency_threshold_sensitivity.csv
+!reports/recency_threshold_sensitivity_tests.csv
+!reports/recency_threshold_sensitivity_thresholds.csv

@@ -1,0 +1,54 @@
+{
+  "analysis_date": "2026-10-26",
+  "reference_date": "2020-03-31",
+  "observation_start": "2020-04-01",
+  "observation_end": "2020-04-30",
+  "timezone": "UTC",
+  "analysis": "fixed-landmark observational comparison, not a threshold optimization",
+  "primary_comparison": "30-34 vs 35-39",
+  "secondary_comparison": "30-34 vs 35+ (exploratory)",
+  "existing_table_rows_checked": 12,
+  "distribution_rows": 732,
+  "eligible_users": 13529831,
+  "total_april_active": 2399651,
+  "source_report_sha256": "feb5dfc84fcf0c70a0e6f07d123ce449a0fec077247bac1b52df05fb429dc433",
+  "source_files": {
+    "candidate": {
+      "path": "data/processed/recency_rebuild/recency_at_reference.candidate.parquet",
+      "sha256": "eefa8519f2649a1dd05f57d0fc78cb4a42a7dbc94074864961a7a207e75da7c2"
+    },
+    "old": {
+      "path": "data/processed/recency_at_reference.parquet",
+      "sha256": "7754805649c318ad81278d43cf3d065da7d3981fc019045a95490353f6ba7959"
+    },
+    "labels": {
+      "path": "data/processed/churn_labels.parquet",
+      "sha256": "2304af31f63814de960ae8859b4b5071302357544877bca49e4696786c08c89e"
+    },
+    "buyers": {
+      "path": "data/processed/purchase_users_at_reference.parquet",
+      "sha256": "c0a0b9626d1affab924bb0c275c90f9ba709a4bf30dea4ea8a31b9be0f5086d5"
+    }
+  },
+  "existing_table_sha256": "f171ac56a29897c7821356b572580d1acb87dd1f51c3fcfb38def84417dc8d5a",
+  "analysis_code_sha256": "bbc078743656a03a80bb9ae07aae8d067a5e13bc256e45fb2111d04a20c6f5a6",
+  "versions": {
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "statsmodels": "0.15.0"
+  },
+  "python_version": "3.12.13",
+  "alpha": 0.05,
+  "raw_events_recomputed": false,
+  "threshold_changed": false,
+  "portfolio_reflection": "pending_user_review",
+  "historical_report_adopted": false,
+  "historical_report_published": false,
+  "limitations": [
+    "Original cache provenance is unknown; matching is not independent proof.",
+    "1,000-user sample cannot exclude rare or concentrated defects.",
+    "Raw-file identities use name/size/mtime, not a full content hash.",
+    "Independent aggregate review is complete; independent raw-event review was not performed. Public release approval remains pending."
+  ],
+  "checks_passed": true
+}
