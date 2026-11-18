@@ -1,6 +1,7 @@
 """Rebuild reference-date purchase strata without using outcome-window purchases.
 
-Run from the repository root: python -m src.ab_design
+Run from the repository root: python -m src.ab_design to summarize reviewed inputs.
+Use --cache-only to create a new purchase cache before independent review.
 Raw CSVs are read only, in bounded chunks. User-level outputs remain in ignored data/.
 """
 from __future__ import annotations
@@ -15,9 +16,10 @@ from statsmodels.stats.power import NormalIndPower
 from statsmodels.stats.proportion import proportion_effectsize
 
 import config
+from src.independent_review import load_reviewed_inputs
 
 
-def purchase_users_before_reference(paths, reference_date, chunksize=500_000):
+def purchase_users_before_reference(paths, reference_date, chunksize=500_000, *, diagnostics=None):
     """Include the full UTC reference day; exclude the next day and later."""
     reference = pd.Timestamp(reference_date)
     reference = (reference.tz_localize("UTC") if reference.tzinfo is None
@@ -25,6 +27,8 @@ def purchase_users_before_reference(paths, reference_date, chunksize=500_000):
     cutoff = reference + pd.Timedelta(days=1)
     buyers = set()
     for path in paths:
+        counts = {"name": Path(path).name, "purchase_rows": 0, "cutoff_excluded_purchase_rows": 0,
+                  "purchase_timestamp_parse_errors": 0}
         for chunk in pd.read_csv(
             path, usecols=["user_id", "event_type", "event_time"],
             dtype={"user_id": config.DTYPES["user_id"],
@@ -37,7 +41,13 @@ def purchase_users_before_reference(paths, reference_date, chunksize=500_000):
             times = pd.to_datetime(purchases["event_time"], utc=True, format="mixed")
             if times.isna().any():
                 raise ValueError("Purchase timestamps must not be missing")
-            buyers.update(purchases.loc[times.lt(cutoff), "user_id"].unique())
+            before = times.lt(cutoff)
+            if diagnostics is not None:
+                counts["purchase_rows"] += len(purchases)
+                counts["cutoff_excluded_purchase_rows"] += int((~before).sum())
+            buyers.update(purchases.loc[before, "user_id"].unique())
+        if diagnostics is not None:
+            diagnostics.append(counts)
         print(f"{Path(path).name}: cumulative pre-reference buyers {len(buyers):,}", flush=True)
     return pd.Index(sorted(buyers), dtype="int64", name="user_id")
 
@@ -49,7 +59,7 @@ def build_risk_population(recency, labels, buyer_ids):
     values = recency["recency_at_ref"]
     if values.isna().any() or values.lt(0).any() or values.mod(1).ne(0).any():
         raise ValueError("Recency must contain non-negative whole calendar days")
-    risk = recency.loc[values.between(15, 29), ["user_id", "recency_at_ref"]].copy()
+    risk = recency.loc[values.between(*config.risk_bounds()), ["user_id", "recency_at_ref"]].copy()
     risk = risk.merge(labels[["user_id", "status"]], on="user_id", how="left", validate="one_to_one")
     if not risk["status"].isin(["retained", "churned"]).all():
         raise ValueError("Every risk user needs an observed outcome; missing/censored labels are invalid")
@@ -79,19 +89,19 @@ def summarize_risk(risk, alpha=0.05, power=0.8, mde=0.05):
 
 
 def load_risk_population():
-    """Read the existing 2020-03-31 recency cache and explicitly dated buyer cache."""
-    recency = pd.read_parquet(config.PROC_DIR / "recency_at_reference.parquet",
-                             columns=["user_id", "recency_at_ref"])
-    labels = pd.read_parquet(config.PROC_DIR / "churn_labels.parquet", columns=["user_id", "status"])
+    """Read this run’s candidate and explicitly dated buyer cache."""
+    _, paths = load_reviewed_inputs()
+    recency = pd.read_parquet(paths["candidate"], columns=["user_id", "recency_at_ref"])
+    labels = pd.read_parquet(paths["labels"], columns=["user_id", "status"])
     labels["status"] = labels["status"].astype("category")
-    buyers = pd.read_parquet(config.PROC_DIR / "purchase_users_at_reference.parquet")
+    buyers = pd.read_parquet(paths["buyers"])
     if buyers.empty or not buyers["reference_date"].eq(config.AB_REFERENCE_DATE).all():
         raise ValueError("Buyer cache does not match the fixed recency reference date; rebuild it")
     if buyers["user_id"].duplicated().any():
         raise ValueError("Buyer cache contains duplicate users")
     if not buyers["user_id"].isin(recency["user_id"]).all():
         raise ValueError("Pre-reference buyers must have pre-reference activity")
-    # The reference recency cache contains exactly the users whose April outcome is observable.
+    # The reference recency cache contains exactly the users whose observation-window outcome is observable.
     eligible = labels.loc[labels["status"].isin(["retained", "churned"]), "user_id"]
     if len(recency) != len(eligible) or not recency["user_id"].isin(eligible).all():
         raise ValueError("Recency population does not match the outcome-label population")
@@ -101,7 +111,7 @@ def load_risk_population():
 def summary_markdown(summary):
     names = {"overall": "전체 위험군", "buyer_before_reference": "기준일 이전 구매 경험군",
              "nonbuyer_before_reference": "기준일 이전 비구매군"}
-    lines = ["| 구분 | 대상자 수 | 4월 재방문자 수 | baseline | 설계 대립값(+5%p) | 군당 표본 |",
+    lines = ["| 구분 | 대상자 수 | 관찰 기간 재방문자 수 | baseline | 설계 대립값(+5%p) | 군당 표본 |",
              "|---|---:|---:|---:|---:|---:|"]
     for r in summary.itertuples(index=False):
         lines.append(f"| {names[r.segment]} | {r.users:,} | {r.returned_users:,} | "
@@ -110,7 +120,7 @@ def summary_markdown(summary):
 
 
 def write_summary(summary):
-    summary.to_csv(config.REPORTS_DIR / "ab_design_summary.csv", index=False)
+    summary.to_csv(config.RUN_REPORTS_DIR / "ab_design_summary.csv", index=False)
     doc_path = config.PROJECT_ROOT / "docs" / "ab_test_design.md"
     doc = doc_path.read_text()
     start, end = "<!-- ab-summary:start -->", "<!-- ab-summary:end -->"
@@ -121,24 +131,46 @@ def write_summary(summary):
     doc_path.write_text(before + start + "\n" + summary_markdown(summary) + "\n" + end + after)
 
 
+def build_purchase_cache(chunksize=500_000):
+    output = config.RUN_PROC_DIR / "purchase_users_at_reference.parquet"
+    audit_path = config.RUN_REPORTS_DIR / "purchase_cache_provenance.json"
+    if output.exists() or audit_path.exists():
+        raise FileExistsError("Purchase cache/provenance already exists")
+    paths = config.RAW_PATHS[:6]
+    from src.recency_reference import file_identity, sha256_file, write_json_new
+    before = [file_identity(p) for p in paths]
+    diagnostics = []
+    buyers = purchase_users_before_reference(paths, config.AB_REFERENCE_DATE, chunksize, diagnostics=diagnostics)
+    after = [file_identity(p) for p in paths]
+    if before != after:
+        raise ValueError("Raw input metadata changed during purchase scan")
+    with output.open("xb") as stream:
+        pd.DataFrame({"user_id": buyers, "reference_date": config.AB_REFERENCE_DATE}).to_parquet(stream, index=False)
+    report = {"run_id": config.RUN_ID, "reference_date": config.AB_REFERENCE_DATE,
+              "feature_end_exclusive": config.AB_FEATURE_END_EXCLUSIVE,
+              "buyers": len(buyers), "source_files": before, "raw_metadata_unchanged": True,
+              "purchase_scan_diagnostics": diagnostics,
+              "output_sha256": sha256_file(output), "producer_sha256": sha256_file(Path(__file__)),
+              "config_sha256": sha256_file(Path(config.__file__))}
+    write_json_new(audit_path, report)
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--chunksize", type=int, default=500_000)
+    parser.add_argument("--cache-only", action="store_true")
     args = parser.parse_args()
     if args.chunksize < 1:
         parser.error("--chunksize must be positive")
-    paths = config.RAW_PATHS[:6]
-    missing = [str(p) for p in paths if not p.is_file()]
-    if missing:
-        parser.error("Set ECOM_DATA_DIR to the monthly CSV directory. Missing: " + ", ".join(missing))
-    buyers = purchase_users_before_reference(paths, config.AB_REFERENCE_DATE, args.chunksize)
-    pd.DataFrame({"user_id": buyers, "reference_date": config.AB_REFERENCE_DATE}).to_parquet(
-        config.PROC_DIR / "purchase_users_at_reference.parquet", index=False)
+    if args.cache_only:
+        print(json.dumps(build_purchase_cache(args.chunksize), indent=2))
+        return
     risk = load_risk_population()
     summary = summarize_risk(risk)
-    write_summary(summary)
+    purchase_audit = json.loads((config.RUN_REPORTS_DIR / "purchase_cache_provenance.json").read_text())
     # Diagnostic comparison only: lifetime purchase history is never used to build the new strata.
-    old = pd.read_parquet(config.PROC_DIR / "user_features.parquet", columns=["user_id", "is_buyer"])
+    old = pd.read_parquet(config.RUN_PROC_DIR / "user_features.parquet", columns=["user_id", "is_buyer"])
     comparison = risk[["user_id", "is_buyer_at_reference", "status"]].merge(
         old, on="user_id", how="left", validate="one_to_one")
     if comparison["is_buyer"].isna().any():
@@ -149,18 +181,19 @@ def main():
     audit = {
         "reference_date": config.AB_REFERENCE_DATE,
         "timezone": "UTC",
-        "feature_end_exclusive": "2020-04-01T00:00:00Z",
-        "outcome_end_exclusive": "2020-05-01T00:00:00Z",
-        "pre_reference_buyers_all_users": len(buyers),
+        "feature_end_exclusive": config.AB_FEATURE_END_EXCLUSIVE,
+        "outcome_end_exclusive": config.AB_OUTCOME_END_EXCLUSIVE,
+        "pre_reference_buyers_all_users": purchase_audit["buyers"],
         "risk_users": len(risk),
         "risk_returned_users": int(risk["status"].eq("retained").sum()),
         "reclassified_future_only_buyers": len(moved),
         "reclassified_returned_users": int(moved["status"].eq("retained").sum()),
-        "source_files": [{"name": p.name, "bytes": p.stat().st_size} for p in paths],
-        "activity_source": "Existing recency_at_reference.parquet (2020-03-31, UTC calendar days)",
-        "outcome_source": "Existing churn_labels.parquet (April activity)",
+        "source_files": purchase_audit["source_files"],
+        "activity_source": str(config.RECENCY_CANDIDATE_PATH.relative_to(config.PROJECT_ROOT)),
+        "outcome_source": f"{config.RUN_ID}/churn_labels.parquet (observation-window activity)",
     }
-    (config.REPORTS_DIR / "ab_design_validation.json").write_text(
+    write_summary(summary)
+    (config.RUN_REPORTS_DIR / "ab_design_validation.json").write_text(
         json.dumps(audit, indent=2, ensure_ascii=False) + "\n")
     print(summary_markdown(summary), flush=True)
     print(json.dumps(audit, ensure_ascii=False, indent=2), flush=True)

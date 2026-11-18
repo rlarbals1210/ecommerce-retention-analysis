@@ -3,6 +3,9 @@
 모든 노트북·스크립트는 하드코딩 대신 이 파일을 import해서 경로를 참조한다.
 """
 import os
+import json
+import hashlib
+from datetime import date, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -79,20 +82,58 @@ EVENT_TYPES = ["view", "cart", "remove_from_cart", "purchase"]
 # ---------------------------------------------------------------------------
 # 이탈(churn) 정의용 상수
 # ---------------------------------------------------------------------------
-# 04_churn_features에서 7개월 전체 유저 재방문 간격을 재검증해 확정 (90번째 percentile인
-# 35일에 근접하면서 운영 시점에 해석하기 쉬운 30일 기준으로 설정).
-CHURN_INACTIVITY_DAYS = 30
-
-RANDOM_SEED = 42
-
-# Existing recency cache uses UTC calendar days through this date.
-AB_REFERENCE_DATE = "2020-03-31"
-
-# Recency restoration is isolated from the cache consumed by notebook 05.
+# N=35 is an operating threshold informed by the full-period gap p90.
+# The risk lower bound comes from pre-reference p75 + 1; it is not fixed here.
+CHURN_INACTIVITY_DAYS = 35
+DATASET_END_DATE = "2020-04-30"
 AB_OBSERVATION_START = "2019-10-01"
-RECENCY_REBUILD_DIR = PROC_DIR / "recency_rebuild"
+AB_REFERENCE_DATE = (date.fromisoformat(DATASET_END_DATE) - timedelta(days=CHURN_INACTIVITY_DAYS)).isoformat()
+AB_FEATURE_END_EXCLUSIVE = (date.fromisoformat(AB_REFERENCE_DATE) + timedelta(days=1)).isoformat() + "T00:00:00Z"
+AB_OUTCOME_END_EXCLUSIVE = (date.fromisoformat(DATASET_END_DATE) + timedelta(days=1)).isoformat() + "T00:00:00Z"
+MAX_RECENCY_DAYS = (date.fromisoformat(AB_REFERENCE_DATE) - date.fromisoformat(AB_OBSERVATION_START)).days
+RUN_ID = f"n{CHURN_INACTIVITY_DAYS}_ref{AB_REFERENCE_DATE.replace('-', '')}"
+RUN_PROC_DIR = PROC_DIR / "runs" / RUN_ID
+RUN_FIGURES_DIR = RUN_PROC_DIR / "figures"
+RUN_REPORTS_DIR = RUN_PROC_DIR / "reports"
+LEGACY_N30_PROC_DIR = PROC_DIR
+LEGACY_N30_REFERENCE_DATE = "2020-03-31"
+LEGACY_N30_REPORTS_DIR = REPORTS_DIR / "archive" / "n30_ref20200331"
+RANDOM_SEED = 42
+RECENCY_REBUILD_DIR = RUN_PROC_DIR / "recency_rebuild"
 RECENCY_SAMPLE_SIZE = 1_000
 RECENCY_CHUNKSIZE = 500_000
-RECENCY_VALIDATION_PATH = REPORTS_DIR / "recency_reference_validation.json"
+RECENCY_VALIDATION_PATH = RUN_REPORTS_DIR / "recency_reference_validation.json"
 RECENCY_CANDIDATE_PATH = RECENCY_REBUILD_DIR / "recency_at_reference.candidate.parquet"
-RECENCY_COMPARISON_PATH = REPORTS_DIR / "recency_segment_comparison.csv"
+RECENCY_COMPARISON_PATH = RUN_REPORTS_DIR / "recency_segment_comparison.csv"
+RISK_BASIS_PATH = RUN_REPORTS_DIR / "pre_reference_gap_distribution.json"
+RISK_APPROVAL_PATH = RUN_REPORTS_DIR / "risk_bound_user_approval.json"
+
+
+def risk_bounds():
+    """Only apply a user decision bound to the unchanged stage-3 evidence bytes."""
+    evidence_bytes = RISK_BASIS_PATH.read_bytes()
+    evidence = json.loads(evidence_bytes)
+    approval = json.loads(RISK_APPROVAL_PATH.read_text())
+    if approval.get("evidence_sha256") != hashlib.sha256(evidence_bytes).hexdigest():
+        raise ValueError("Risk evidence hash does not match user approval")
+    for obj in (evidence, approval):
+        if obj.get("run_id") != RUN_ID or obj.get("reference_date") != AB_REFERENCE_DATE:
+            raise ValueError("Risk evidence/approval belongs to another run")
+    if approval.get("status") != "approved_by_user":
+        raise ValueError("Stage-3 risk lower bound requires user confirmation")
+    lower = evidence["pre_reference"]["p75"] + 1
+    if not float(lower).is_integer():
+        raise ValueError("Noninteger p75+1 requires explicit boundary decision")
+    lower, upper = int(lower), CHURN_INACTIVITY_DAYS - 1
+    decision = approval["decision"]
+    if (decision.get("lower_days"), decision.get("upper_days"), decision.get("n_days")) != (lower, upper, CHURN_INACTIVITY_DAYS):
+        raise ValueError("Computed risk bounds differ from approved decision")
+    bands = ["0-7", f"8-{lower - 1}", f"{lower}-{upper}", f"{CHURN_INACTIVITY_DAYS}+"]
+    if not 8 < lower <= upper or decision.get("recency_bands") != bands:
+        raise ValueError("Approved Recency partition is incompatible")
+    return lower, upper
+
+
+def recency_bands():
+    lower, upper = risk_bounds()
+    return ("0-7", f"8-{lower-1}", f"{lower}-{upper}", f"{CHURN_INACTIVITY_DAYS}+")

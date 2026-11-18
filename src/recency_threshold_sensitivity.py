@@ -1,11 +1,12 @@
 """Post-submission, fixed-landmark sensitivity analysis; no raw CSV scan.
 
-Run: python -m src.recency_threshold_sensitivity
+Run: python -m src.recency_threshold_sensitivity --out-dir /path/to/new-replay-directory
 Inputs are the previously validated daily counts and their unchanged local caches.
 Existing definitions, notebooks and public portfolio text are never rewritten.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import json
@@ -207,20 +208,27 @@ def markdown_report(bands, tests, thresholds, provenance):
 
 
 def main():
-    source = config.RECENCY_VALIDATION_PATH
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out-dir", type=Path, required=True, help="Fresh replay output directory")
+    args = parser.parse_args()
+    archive = config.LEGACY_N30_REPORTS_DIR
+    source = archive / "recency_reference_validation.json"
+    existing_table = archive / "recency_segment_comparison.csv"
+    legacy = config.LEGACY_N30_PROC_DIR
+    reference_date = config.LEGACY_N30_REFERENCE_DATE
     report = json.loads(source.read_text())
-    require(config.AB_REFERENCE_DATE == "2020-03-31", "Unexpected reference date")
+    require(reference_date == "2020-03-31", "Unexpected legacy reference date")
     require(report["decision_status"] == "jointly_confirmed_branch_1", "Unconfirmed candidate")
     require(report["joint_review"]["candidate_approved_for_analysis"], "Candidate not approved for analysis")
-    require(report["scan_diagnostics"]["reference_date"] == config.AB_REFERENCE_DATE,
+    require(report["scan_diagnostics"]["reference_date"] == reference_date,
             "Report reference mismatch")
     require(report["scan_diagnostics"]["cutoff_exclusive_utc"] == "2020-04-01T00:00:00+00:00",
             "Report cutoff mismatch")
     inputs = {
-        "candidate": config.RECENCY_CANDIDATE_PATH,
-        "old": config.PROC_DIR / "recency_at_reference.parquet",
-        "labels": config.PROC_DIR / "churn_labels.parquet",
-        "buyers": config.PROC_DIR / "purchase_users_at_reference.parquet",
+        "candidate": legacy / "recency_rebuild" / "recency_at_reference.candidate.parquet",
+        "old": legacy / "recency_at_reference.parquet",
+        "labels": legacy / "churn_labels.parquet",
+        "buyers": legacy / "purchase_users_at_reference.parquet",
     }
     identities = {}
     for key, path in inputs.items():
@@ -230,17 +238,17 @@ def main():
     rows = report["daily_distributions"]["candidate"]
     validate_distribution(rows, report["eligible_users"])
     require(rows == report["daily_distributions"]["old"], "Old/candidate distribution differs")
-    existing_rows = check_existing_table(rows, config.RECENCY_COMPARISON_PATH)
+    existing_rows = check_existing_table(rows, existing_table)
     bands, tests, thresholds = analyze(rows)
     provenance = dict(
-        analysis_date=ANALYSIS_DATE, reference_date=config.AB_REFERENCE_DATE,
+        analysis_date=ANALYSIS_DATE, reference_date=reference_date,
         observation_start="2020-04-01", observation_end="2020-04-30", timezone="UTC",
         analysis="fixed-landmark observational comparison, not a threshold optimization",
         primary_comparison="30-34 vs 35-39", secondary_comparison="30-34 vs 35+ (exploratory)",
         existing_table_rows_checked=existing_rows, distribution_rows=len(rows),
         eligible_users=report["eligible_users"], total_april_active=counts(rows, 0)[1],
         source_report_sha256=sha256(source), source_files=identities,
-        existing_table_sha256=sha256(config.RECENCY_COMPARISON_PATH),
+        existing_table_sha256=sha256(existing_table),
         analysis_code_sha256=sha256(Path(__file__)),
         versions={name: version(name) for name in ["numpy", "scipy", "statsmodels"]},
         python_version=platform.python_version(), alpha=ALPHA,
@@ -249,13 +257,14 @@ def main():
         historical_report_adopted=report["adopted"], historical_report_published=report["published"],
         limitations=report["limitations"], checks_passed=True,
     )
-    prefix = config.REPORTS_DIR / "recency_threshold_sensitivity"
+    args.out_dir.mkdir(parents=True, exist_ok=False)
+    prefix = args.out_dir / "recency_threshold_sensitivity"
     write_csv(prefix.with_suffix(".csv"), bands)
     write_csv(prefix.with_name(prefix.name + "_tests.csv"), tests)
     write_csv(prefix.with_name(prefix.name + "_thresholds.csv"), thresholds)
     prefix.with_name(prefix.name + "_validation.json").write_text(
         json.dumps(provenance, ensure_ascii=False, indent=2, allow_nan=False) + "\n")
-    doc = config.PROJECT_ROOT / "docs" / "recency_threshold_sensitivity.md"
+    doc = args.out_dir / "recency_threshold_sensitivity.md"
     doc.write_text(markdown_report(bands, tests, thresholds, provenance), encoding="utf-8")
     print(json.dumps(dict(bands=bands, comparisons=tests, thresholds=thresholds,
                           report=str(doc), checks_passed=True), ensure_ascii=False, indent=2))

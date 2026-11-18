@@ -1,0 +1,61 @@
+{
+  "run_id": "n35_ref20200326",
+  "reference_date": "2020-03-26",
+  "decision_status": "jointly_confirmed_n35_ref20200326",
+  "reviewer": "Claude",
+  "review_date": "2026-11-18",
+  "review_conclusion": "passed_with_condition",
+  "condition_satisfied": true,
+  "review_source": {
+    "repository": "AI-brain",
+    "commit": "3c50689325937e59dc22b88ee59a11d9e28ba749",
+    "log_section": "2026-11-18 · Claude(원격) · 리텐션 35일 5단계 Claude 독립 대조"
+  },
+  "review_scope": {
+    "raw_events_partial": "March cutoff exclusion; February 26–28 event and user counts.",
+    "independent_aggregate": "User-level and stratified counts, baselines, and sample sizes recomputed independently. 712 daily cells and 178 curve points matched.",
+    "implementation_and_sample": "Approval binding and UTC review; independent sample Recency recalculation matched 1000/1000.",
+    "unverified": "Full six-month raw count, raw reconstruction of the pre-reference purchase population, and full raw file content hashes."
+  },
+  "condition_verification": {
+    "shared_gate": "src/independent_review.py",
+    "tests": "tests/test_independent_review.py",
+    "passed_suite_tests": 52,
+    "summary_cli_rebuilds_purchase_cache": false
+  },
+  "bundle_sha256": "de879bd578c00cd9f15e39cd4d4422f94a5dd5349dd57075443904826de2fc23",
+  "validation_sha256": "a15d6096b9d0982d35b2a5609ea2c1ccd5fe9ad3ca1c2bf697a02324eb417d4b",
+  "eligible_users": 13347976,
+  "sample_checked": 1000,
+  "sample_matched": 1000,
+  "risk_summaries": [
+    {
+      "segment": "overall",
+      "users": 2852344,
+      "returned_users": 726061,
+      "baseline": 0.25454889031617506,
+      "target": 0.30454889031617505,
+      "n_per_arm": 1263,
+      "n_total": 2526
+    },
+    {
+      "segment": "buyer_before_reference",
+      "users": 376467,
+      "returned_users": 161770,
+      "baseline": 0.4297056581320541,
+      "target": 0.47970565813205407,
+      "n_per_arm": 1556,
+      "n_total": 3112
+    },
+    {
+      "segment": "nonbuyer_before_reference",
+      "users": 2475877,
+      "returned_users": 564291,
+      "baseline": 0.22791560323877155,
+      "target": 0.27791560323877157,
+      "n_per_arm": 1184,
+      "n_total": 2368
+    }
+  ],
+  "recorded_at_utc": "2026-11-18T11:24:56.994506+00:00"
+}

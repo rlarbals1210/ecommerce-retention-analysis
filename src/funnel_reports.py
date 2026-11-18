@@ -93,7 +93,7 @@ def export(monthly):
     overall.to_csv(TABLEAU_DIR / 'funnel_overall.csv', index=False, encoding='utf-8-sig')
     kpi = pd.read_csv(TABLEAU_DIR / 'kpi_summary.csv')
     kpi['metric'] = kpi['metric'].replace({
-        '구매 전환율': '구매 경험자 비율', '확정 이탈률': '4월 미활동 비율',
+        '구매 전환율': '구매 경험자 비율', '확정 이탈률': '관찰 기간 미활동 비율', '4월 미활동 비율': '관찰 기간 미활동 비율',
         'view→cart 전환율': 'cart / 전체 세션', 'cart→purchase 전환율': 'cart·purchase 모두 / cart',
         '장바구니 이탈률': 'cart 미구매 비율',
     })
@@ -109,8 +109,8 @@ def export(monthly):
             raise ValueError(f'Expected exactly one KPI: {metric}')
         kpi.loc[mask, ['value', 'note']] = [value, note]
     kpi.loc[kpi.metric.eq('전체 세션'), 'note'] = '7개월 월별 고유 세션 수 합계; 월 경계 중복 미검증'
-    kpi.loc[kpi.metric.eq('4월 미활동 비율'), 'note'] = '3/31 UTC까지 관측된 사용자 중 4월 미활동; 영구 이탈 아님; 4월 최초 관측자 제외'
-    kpi.loc[kpi.metric.eq('판단 보류(censored)'), 'note'] = '4월 최초 관측자로 관찰 기회 부족; 실제 신규 가입자 아님'
+    kpi.loc[kpi.metric.eq('관찰 기간 미활동 비율'), 'note'] = '3/26 UTC까지 관측된 사용자 중 3/27~4/30 미활동'
+    kpi.loc[kpi.metric.eq('판단 보류(censored)'), 'note'] = '3/27~4/30 처음 관측된 사용자'
     kpi.to_csv(TABLEAU_DIR / 'kpi_summary.csv', index=False, encoding='utf-8-sig')
     return monthly, overall
 

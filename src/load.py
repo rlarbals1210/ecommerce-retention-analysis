@@ -4,7 +4,7 @@ import pandas as pd
 import config
 
 
-def load_month(path, usecols=None):
+def load_month(path, usecols=None, *, utc=False):
     """CSV 파일 하나를 필요한 컬럼·dtype만 지정해 로드한다. usecols 미지정 시 전체 컬럼."""
     if usecols is None:
         usecols = config.COLUMNS
@@ -12,6 +12,16 @@ def load_month(path, usecols=None):
     dtype = {col: dt for col, dt in config.DTYPES.items() if col in usecols}
     parse_dates = ["event_time"] if "event_time" in usecols else False
 
+    if utc and "event_time" in usecols:
+        frame = pd.read_csv(path, usecols=usecols, dtype=dtype)
+        try:
+            frame["event_time"] = pd.to_datetime(frame["event_time"], utc=True, errors="raise")
+        except ValueError:
+            # Mixed timezone spellings in external/synthetic inputs still parse explicitly as UTC.
+            frame["event_time"] = pd.to_datetime(frame["event_time"], utc=True, format="mixed", errors="raise")
+        if frame["event_time"].isna().any():
+            raise ValueError("Missing event timestamp")
+        return frame
     return pd.read_csv(path, usecols=usecols, dtype=dtype, parse_dates=parse_dates)
 
 

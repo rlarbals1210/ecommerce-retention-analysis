@@ -1,39 +1,45 @@
 {
-  "reference_date": "2020-03-31",
+  "reference_date": "2020-03-26",
   "timezone": "UTC",
-  "feature_end_exclusive": "2020-04-01T00:00:00Z",
+  "feature_end_exclusive": "2020-03-27T00:00:00Z",
   "outcome_end_exclusive": "2020-05-01T00:00:00Z",
-  "pre_reference_buyers_all_users": 1744364,
-  "risk_users": 2200340,
-  "risk_returned_users": 571010,
-  "reclassified_future_only_buyers": 32583,
-  "reclassified_returned_users": 32583,
+  "pre_reference_buyers_all_users": 1711570,
+  "risk_users": 2852344,
+  "risk_returned_users": 726061,
+  "reclassified_future_only_buyers": 43919,
+  "reclassified_returned_users": 43919,
   "source_files": [
     {
       "name": "2019-Oct.csv",
-      "bytes": 5668612855
+      "bytes": 5668612855,
+      "mtime_ns": 1782902070590000000
     },
     {
       "name": "2019-Nov.csv",
-      "bytes": 9006762395
+      "bytes": 9006762395,
+      "mtime_ns": 1782902083350000000
     },
     {
       "name": "2019-Dec.csv",
-      "bytes": 9357988804
+      "bytes": 9357988804,
+      "mtime_ns": 1782902088220000000
     },
     {
       "name": "2020-Jan.csv",
-      "bytes": 7777991113
+      "bytes": 7777991113,
+      "mtime_ns": 1782902138090000000
     },
     {
       "name": "2020-Feb.csv",
-      "bytes": 7675550422
+      "bytes": 7675550422,
+      "mtime_ns": 1782902123180000000
     },
     {
       "name": "2020-Mar.csv",
-      "bytes": 7823838608
+      "bytes": 7823838608,
+      "mtime_ns": 1782902141460000000
     }
   ],
-  "activity_source": "Existing recency_at_reference.parquet (2020-03-31, UTC calendar days)",
-  "outcome_source": "Existing churn_labels.parquet (April activity)"
+  "activity_source": "data/processed/runs/n35_ref20200326/recency_rebuild/recency_at_reference.candidate.parquet",
+  "outcome_source": "n35_ref20200326/churn_labels.parquet (observation-window activity)"
 }

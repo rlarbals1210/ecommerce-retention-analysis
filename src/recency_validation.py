@@ -64,46 +64,48 @@ def daily_distribution(frame, labels, buyer_ids, upper_days):
     finite = values.notna() & np.isfinite(values)
     valid = finite & values.ge(0) & values.le(upper_days) & values.mod(1).eq(0)
     joined["is_buyer_at_reference"] = joined["user_id"].isin(buyer_ids)
-    joined["april_active"] = joined["status"].eq("retained")
-    cols = ["recency_at_ref", "is_buyer_at_reference", "april_active"]
+    joined["outcome_active"] = joined["status"].eq("retained")
+    cols = ["recency_at_ref", "is_buyer_at_reference", "outcome_active"]
     groups = joined.loc[valid].groupby(cols, observed=True, dropna=False).size()
     rows = [{"recency_at_ref": int(day), "is_buyer_at_reference": bool(buyer),
-             "april_active": bool(active), "users": int(count), "recency_state": "valid"}
+             "outcome_active": bool(active), "users": int(count), "recency_state": "valid"}
             for (day, buyer, active), count in groups.items()]
     if (~valid).any():
-        bad = joined.loc[~valid, ["is_buyer_at_reference", "april_active"]].copy()
+        bad = joined.loc[~valid, ["is_buyer_at_reference", "outcome_active"]].copy()
         bad["recency_state"] = np.select(
             [values.loc[~valid].isna(), ~np.isfinite(values.loc[~valid]),
              values.loc[~valid].lt(0), values.loc[~valid].mod(1).ne(0)],
             ["missing_or_nonnumeric", "nonfinite", "negative", "noninteger"], default="above_max")
         for (state, buyer, active), count in bad.groupby(
-                ["recency_state", "is_buyer_at_reference", "april_active"], observed=True).size().items():
+                ["recency_state", "is_buyer_at_reference", "outcome_active"], observed=True).size().items():
             rows.append({"recency_at_ref": None, "is_buyer_at_reference": bool(buyer),
-                         "april_active": bool(active), "users": int(count), "recency_state": state})
+                         "outcome_active": bool(active), "users": int(count), "recency_state": state})
     if sum(row["users"] for row in rows) != len(frame):
         raise ValueError("Distribution does not account for every row")
     return rows
 
 
 def interval_counts(distribution):
-    groups = {(band, buyer): [0, 0] for band in ["0-7", "8-14", "15-29", "30+"]
+    bands = config.recency_bands()
+    lower, upper = config.risk_bounds()
+    groups = {(band, buyer): [0, 0] for band in bands
               for buyer in [False, True]}
     for row in distribution:
         if row["recency_state"] != "valid":
             band = "invalid:" + row["recency_state"]
         else:
             day = row["recency_at_ref"]
-            band = "0-7" if day <= 7 else "8-14" if day <= 14 else "15-29" if day <= 29 else "30+"
+            band = bands[0] if day <= 7 else bands[1] if day < lower else bands[2] if day <= upper else bands[3]
         pair = groups.setdefault((band, row["is_buyer_at_reference"]), [0, 0])
         pair[0] += row["users"]
-        pair[1] += row["users"] if row["april_active"] else 0
+        pair[1] += row["users"] if row["outcome_active"] else 0
     return [{"recency_band": band, "is_buyer_at_reference": buyer, "users": n,
              "returned_users": r, "baseline": r / n if n else None}
             for (band, buyer), (n, r) in groups.items()]
 
 
 def risk_summary(intervals, alpha=0.05, power=0.8, mde=0.05):
-    risk = {r["is_buyer_at_reference"]: r for r in intervals if r["recency_band"] == "15-29"}
+    risk = {r["is_buyer_at_reference"]: r for r in intervals if r["recency_band"] == config.recency_bands()[2]}
     rows = []
     for name, strata in [("overall", [False, True]), ("buyer_before_reference", [True]),
                          ("nonbuyer_before_reference", [False])]:
@@ -131,7 +133,8 @@ def decide(validated, distribution_equal, public_equal):
 
 
 def validate_frames(old, candidate, labels, buyers, sample_ids, sample_events, scan_audit,
-                    *, synthetic_passed, upper_days=182):
+                    *, synthetic_passed, upper_days=None):
+    upper_days = config.MAX_RECENCY_DAYS if upper_days is None else upper_days
     if (labels["user_id"].isna().any() or labels["user_id"].duplicated().any()
             or not labels["status"].isin(["retained", "churned", "censored"]).all()):
         raise ValueError("Invalid outcome-label input")
@@ -140,7 +143,7 @@ def validate_frames(old, candidate, labels, buyers, sample_ids, sample_events, s
                    and buyers["reference_date"].eq(config.AB_REFERENCE_DATE).all()
                    and buyers["user_id"].isin(eligible).all())
     candidate_check = recency_checks(candidate, eligible, upper_days)
-    old_check = recency_checks(old, eligible, upper_days)
+    old_check = recency_checks(old, eligible, upper_days) if old is not None else None
     files = scan_audit["files"]
     diagnostic_pass = (bool(files) and scan_audit["parse_errors"] == 0
                        and not scan_audit["input_changed"]
@@ -169,6 +172,18 @@ def validate_frames(old, candidate, labels, buyers, sample_ids, sample_events, s
     except (ValueError, TypeError) as exc:
         report["checks"]["c_sample"] = {"passed": False, "error": str(exc)}
     passed = all(c["passed"] for c in report["checks"].values())
+    if old is None:
+        report["run_id"] = config.RUN_ID
+        report["reference_date"] = config.AB_REFERENCE_DATE
+        report["decision_branch"] = None
+        report["decision_status"] = "pending_independent_review" if passed else "validation_failed"
+        if passed:
+            hist = daily_distribution(candidate, labels, buyers["user_id"], upper_days)
+            intervals = interval_counts(hist)
+            report.update({"daily_distributions": {"candidate": hist},
+                           "interval_counts": {"candidate": intervals},
+                           "risk_summaries": {"candidate": risk_summary(intervals)}})
+        return report
     if not candidate_check["joinable"] or not old_check["joinable"] or not buyer_valid:
         return report
     # Population mismatch prevents reliable label joins; retain structural failure evidence.
@@ -231,10 +246,9 @@ def main():
         run = args.run_dir
         manifest = json.loads((run / "preparation.json").read_text())
         scan = json.loads((run / "scan_diagnostics.json").read_text())
-        inputs = {"labels": config.PROC_DIR / "churn_labels.parquet",
-                  "old": config.PROC_DIR / "recency_at_reference.parquet",
+        inputs = {"labels": config.RUN_PROC_DIR / "churn_labels.parquet",
                   "candidate": run / "recency_at_reference.candidate.parquet",
-                  "buyers": config.PROC_DIR / "purchase_users_at_reference.parquet",
+                  "buyers": config.RUN_PROC_DIR / "purchase_users_at_reference.parquet",
                   "sample_ids": run / "sample_users.parquet", "sample_events": run / "sample_events.parquet"}
         identities = {key: {**file_identity(path), "sha256": sha256_file(path)} for key, path in inputs.items()}
         if identities["labels"]["sha256"] != manifest["label_source"]["sha256"]:
@@ -248,8 +262,19 @@ def main():
         for path, diag in zip(config.RAW_PATHS[:6], scan["files"]):
             if file_identity(path) != {k: diag[k] for k in ["name", "bytes", "mtime_ns"]}:
                 raise ValueError("Raw input metadata changed after scanning")
-        test = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests",
-                               "-p", "test_recency_reference.py", "-v"], cwd=config.PROJECT_ROOT,
+        if scan["config_sha256"] != sha256_file(Path(config.__file__)):
+            raise ValueError("Config changed since Recency scan")
+        purchase_audit = json.loads((config.RUN_REPORTS_DIR / "purchase_cache_provenance.json").read_text())
+        if (purchase_audit["run_id"] != config.RUN_ID
+                or purchase_audit["reference_date"] != config.AB_REFERENCE_DATE
+                or purchase_audit["feature_end_exclusive"] != config.AB_FEATURE_END_EXCLUSIVE
+                or purchase_audit["output_sha256"] != identities["buyers"]["sha256"]
+                or purchase_audit["config_sha256"] != sha256_file(Path(config.__file__))
+                or purchase_audit["producer_sha256"] != sha256_file(config.PROJECT_ROOT / "src" / "ab_design.py")
+                or purchase_audit["source_files"] != [file_identity(p) for p in config.RAW_PATHS[:6]]
+                or not purchase_audit["raw_metadata_unchanged"]):
+            raise ValueError("Purchase provenance does not match current run")
+        test = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=config.PROJECT_ROOT,
                               capture_output=True, text=True, check=False)
         sample = pd.read_parquet(inputs["sample_ids"])["user_id"]
         if len(sample) != manifest["sample_size"] or sample_digest(sample) != manifest["sample_ids_sha256"]:
@@ -261,7 +286,7 @@ def main():
             raise ValueError("Tested producer differs from the scanned producer")
         labels = pd.read_parquet(inputs["labels"], columns=["user_id", "status"])
         labels["status"] = labels["status"].astype("category")
-        report = validate_frames(pd.read_parquet(inputs["old"], columns=["user_id", "recency_at_ref"]),
+        report = validate_frames(None,
                                  pd.read_parquet(inputs["candidate"]), labels, pd.read_parquet(inputs["buyers"]),
                                  sample, pd.read_parquet(inputs["sample_events"]), scan,
                                  synthetic_passed=test.returncode == 0,
@@ -271,25 +296,30 @@ def main():
                                                "producer_sha256": producer_hash})
         report["input_files"] = identities
         report["sample_ids_sha256"] = manifest["sample_ids_sha256"]
+        report["purchase_cache_provenance_sha256"] = sha256_file(config.RUN_REPORTS_DIR / "purchase_cache_provenance.json")
+        report["config_sha256"] = sha256_file(Path(config.__file__))
+        report["lower_bound_wording"] = json.loads(config.RISK_APPROVAL_PATH.read_text())["wording"]
         report["label_reference_count_matches_preparation"] = report["eligible_users"] == manifest["eligible_users"]
         if not report["label_reference_count_matches_preparation"]:
             report["decision_branch"] = 4
-        if "risk_summaries" in report:
-            published = pd.read_csv(config.REPORTS_DIR / "ab_design_summary.csv")
-            matches = {key: published_matches(value, published) for key, value in report["risk_summaries"].items()}
-            report["published_05_summary_matches"] = matches
-            if not matches["candidate"] and report["decision_branch"] != 4:
-                report["decision_branch"] = 3
         report["input_metadata_unchanged_during_validation"] = all(
             file_identity(path) == {k: identities[key][k] for k in ["name", "bytes", "mtime_ns"]}
             for key, path in inputs.items())
         if not report["input_metadata_unchanged_during_validation"]:
             report["decision_branch"] = 4
+        report["risk_bound_approval"] = {
+            "approval_file": str(config.RISK_APPROVAL_PATH.relative_to(config.PROJECT_ROOT)),
+            "approval_sha256": sha256_file(config.RISK_APPROVAL_PATH),
+            "evidence_sha256": sha256_file(config.RISK_BASIS_PATH),
+            "bounds": list(config.risk_bounds()), "bands": list(config.recency_bands())}
+        report["power_parameters"] = {"alpha": 0.05, "power": 0.8, "mde_absolute": 0.05, "alternative": "two-sided", "ratio": 1}
         report["validation_code_sha256"] = sha256_file(Path(__file__))
     except Exception as exc:
         report.update({"decision_branch": 4, "error": f"{type(exc).__name__}: {exc}"})
+    if report.get("decision_branch") == 4 or report.get("error"):
+        report["decision_status"] = "validation_failed"
     report["created_at_utc"] = datetime.now(timezone.utc).isoformat()
-    report["limitations"] = ["Original cache provenance is unknown; matching is not independent proof.",
+    report["limitations"] = ["New reference-date run; old-cache equality is not a validity criterion.",
                               "1,000-user sample cannot exclude rare or concentrated defects.",
                               "Raw-file identities use name/size/mtime, not a full content hash.",
                               "Independent review and public release approval are still pending."]
@@ -298,7 +328,7 @@ def main():
                       "error": report.get("error"), "checks": report.get("checks"),
                       "user_comparison": report.get("user_comparison"),
                       "comparison": report.get("comparison")}, ensure_ascii=False, indent=2))
-    if report["decision_branch"] == 4:
+    if report["decision_branch"] == 4 or report.get("decision_status") == "validation_failed":
         raise SystemExit(1)
 
 

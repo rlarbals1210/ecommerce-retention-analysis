@@ -24,7 +24,7 @@ class RecencyReferenceTest(unittest.TestCase):
         return path
 
     def scan(self, rows, chunksize=2, sample_ids=()):
-        return scan_recency([self.source(rows)], "2020-03-31", sample_ids, chunksize)
+        return scan_recency([self.source(rows)], "2020-03-26", sample_ids, chunksize)
 
     def labels(self):
         labels = pd.DataFrame({"user_id": [5, 2, 3, 1, 4],
@@ -35,36 +35,48 @@ class RecencyReferenceTest(unittest.TestCase):
 
     def test_utc_boundary_and_future_only_exclusion(self):
         result, audit, _ = self.scan([
-            (1, "2020-03-31 23:59:59 UTC"), (1, "2020-04-01 00:00:00 UTC"),
-            (2, "2020-04-01 00:00:00 UTC"), (3, "2020-04-30 12:00:00 UTC"),
-            (4, "2020-04-01T08:59:59+09:00"), (5, "2020-04-01T09:00:00+09:00"),
-            (6, "2020-03-31T23:00:00-02:00"), (7, "2019-10-01 00:00:00 UTC"),
+            (1, "2020-03-26 23:59:59 UTC"), (1, "2020-03-27 00:00:00 UTC"),
+            (2, "2020-03-27 00:00:00 UTC"), (3, "2020-04-30 12:00:00 UTC"),
+            (4, "2020-03-27T08:59:59+09:00"), (5, "2020-03-27T09:00:00+09:00"),
+            (6, "2020-03-26T23:00:00-02:00"), (7, "2019-10-01 00:00:00 UTC"),
         ])
-        self.assertEqual(result.set_index("user_id")["recency_at_ref"].to_dict(), {1: 0, 4: 0, 7: 182})
+        self.assertEqual(result.set_index("user_id")["recency_at_ref"].to_dict(), {1: 0, 4: 0, 7: 177})
         self.assertEqual(audit["cutoff_excluded_rows"], 5)
         self.assertEqual(audit["parse_errors"], 0)
 
+    def test_recency28_raw_diagnostic_counts_rows_users_and_hours(self):
+        result, audit, _ = self.scan([
+            (1,"2020-02-27 00:00:00 UTC"),(1,"2020-02-27 00:00:00 UTC"),
+            (2,"2020-02-27 23:00:00 UTC"),(1,"2020-03-01 00:00:00 UTC"),
+            (3,"2020-02-26 00:00:00 UTC")],chunksize=1)
+        diag = audit["recency28_raw_activity"]
+        self.assertEqual(diag["target_date"],"2020-02-27")
+        target = next(d for d in diag["days"] if d["date"]=="2020-02-27")
+        self.assertEqual((target["event_rows"],target["unique_users"]),(3,2))
+        self.assertEqual(sum(x["event_rows"] for x in target["hourly_event_rows"]),3)
+        self.assertEqual(int(result.recency_at_ref.eq(28).sum()),1)
+
     def test_order_chunks_duplicates_and_files_are_invariant(self):
         rows = [(u, f"2020-03-{day:02} 12:00:00 UTC")
-                for u in range(1, 8) for day in [1, 3, 15, 31]]
+                for u in range(1, 8) for day in [1, 3, 15, 26]]
         expected = self.scan(rows, 100)[0]
         shuffled = pd.DataFrame(rows * 2).sample(frac=1, random_state=18).to_records(index=False).tolist()
         for chunk in [1, 2, 3, 7, 17, 100]:
             with self.subTest(chunk=chunk):
                 pd.testing.assert_frame_equal(self.scan(shuffled, chunk)[0], expected)
         paths = [self.source(rows[:13], "one.csv"), self.source(rows[13:], "two.csv")]
-        pd.testing.assert_frame_equal(scan_recency(paths[::-1], "2020-03-31", chunksize=3)[0], expected)
+        pd.testing.assert_frame_equal(scan_recency(paths[::-1], "2020-03-26", chunksize=3)[0], expected)
 
     def test_matches_historical_activity_day_algorithm_without_out_of_range_rows(self):
         rows = [(3, "2019-10-01 10:00:00 UTC"), (1, "2020-02-29 00:00:00 UTC"),
                 (1, "2020-03-20 23:59:59 UTC"), (1, "2020-03-20 23:59:59 UTC"),
-                (2, "2020-03-31 12:00:00 UTC"), (3, "2019-11-15 00:00:00 UTC")]
+                (2, "2020-03-26 12:00:00 UTC"), (3, "2019-11-15 00:00:00 UTC")]
         # Independent literal reference to the historical cell, including deduplication.
         data = pd.DataFrame(rows, columns=["user_id", "event_time"])
         data["date"] = pd.to_datetime(data["event_time"], utc=True).dt.normalize()
         daily = data[["user_id", "date"]].drop_duplicates()
         last = daily.groupby("user_id")["date"].max()
-        expected = (pd.Timestamp("2020-03-31", tz="UTC") - last).dt.days.rename("recency_at_ref").reset_index()
+        expected = (pd.Timestamp("2020-03-26", tz="UTC") - last).dt.days.rename("recency_at_ref").reset_index()
         pd.testing.assert_frame_equal(self.scan(rows, 2)[0], expected)
 
     def test_pre_filter_diagnostics_include_invalid_and_excluded_rows(self):
@@ -83,11 +95,11 @@ class RecencyReferenceTest(unittest.TestCase):
         self.assertTrue(diag["max_time_utc"].startswith("2020-04-02"))
         self.assertEqual(len(events), 4)  # Bad/future sampled rows remain in the evidence.
         self.assertEqual(events["source_row"].tolist(), [1, 2, 3, 4])
-        self.assertEqual(result.set_index("user_id").loc[2, "recency_at_ref"], 183)
+        self.assertEqual(result.set_index("user_id").loc[2, "recency_at_ref"], 178)
         self.assertEqual(audit["state"], "candidate_only_not_validated")
 
     def test_empty_pre_reference_population(self):
-        result, audit, _ = self.scan([(1, "2020-04-01 00:00:00 UTC")])
+        result, audit, _ = self.scan([(1, "2020-03-27 00:00:00 UTC")])
         self.assertTrue(result.empty)
         self.assertEqual(result.columns.tolist(), ["user_id", "recency_at_ref"])
         self.assertEqual(audit["cutoff_excluded_rows"], 1)
@@ -124,19 +136,19 @@ class RecencyReferenceTest(unittest.TestCase):
         self.assertEqual((directory / "preparation.json").read_bytes(), original)
 
     def test_independent_sample_oracle_and_missing_sample_failure(self):
-        rows = [(1, "2020-03-01 00:00:00 UTC"), (1, "2020-03-31T15:00:00+09:00"),
-                (1, "2020-04-01 00:00:00 UTC"), (2, "2020-03-02 20:00:00 UTC"),
-                (2, "2020-03-10 20:00:00 UTC"), (3, "2020-03-31 00:00:00 UTC")]
+        rows = [(1, "2020-03-01 00:00:00 UTC"), (1, "2020-03-26T15:00:00+09:00"),
+                (1, "2020-03-27 00:00:00 UTC"), (2, "2020-03-02 20:00:00 UTC"),
+                (2, "2020-03-10 20:00:00 UTC"), (3, "2020-03-26 00:00:00 UTC")]
         candidate, _, events = self.scan(rows, 1, [1, 2])
         with patch("src.recency_reference.utc_reference", side_effect=AssertionError("Production helper forbidden")), \
                 patch("src.recency_reference.pd.to_datetime", side_effect=AssertionError("Production parser forbidden")):
-            actual = independent_sample_recency(events, [1, 2], "2020-03-31")
+            actual = independent_sample_recency(events, [1, 2], "2020-03-26")
         self.assertEqual(actual, candidate.set_index("user_id")["recency_at_ref"].loc[[1, 2]].to_dict())
         with self.assertRaises(ValueError):
-            independent_sample_recency(events, [1, 2, 3], "2020-03-31")
+            independent_sample_recency(events, [1, 2, 3], "2020-03-26")
         invalid = pd.DataFrame({"user_id": [1], "event_time": ["bad"]})
         with self.assertRaises(ValueError):
-            independent_sample_recency(invalid, [1], "2020-03-31")
+            independent_sample_recency(invalid, [1], "2020-03-26")
 
     def test_explicit_scan_writes_only_candidate_and_preserves_existing_outputs(self):
         directory = self.root / "run"
@@ -160,12 +172,12 @@ class RecencyReferenceTest(unittest.TestCase):
 
     def test_invalid_scan_arguments(self):
         with self.assertRaises(ValueError):
-            scan_recency([], "2020-03-31")
+            scan_recency([], "2020-03-26")
         path = self.source([(1, "2020-03-01 00:00:00 UTC")])
         with self.assertRaises(ValueError):
-            scan_recency([path, path], "2020-03-31")
+            scan_recency([path, path], "2020-03-26")
         with self.assertRaises(ValueError):
-            scan_recency([path], "2020-03-31", chunksize=0)
+            scan_recency([path], "2020-03-26", chunksize=0)
 
 
 if __name__ == "__main__":

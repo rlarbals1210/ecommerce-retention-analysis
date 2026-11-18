@@ -1317,7 +1317,7 @@
               <groupfilter function="member" level="[none:metric:nk]" member="&quot;구매 경험자 비율&quot;" />
               <groupfilter function="member" level="[none:metric:nk]" member="&quot;반복 구매율&quot;" />
               <groupfilter function="member" level="[none:metric:nk]" member="&quot;cart 미구매 비율&quot;" />
-              <groupfilter function="member" level="[none:metric:nk]" member="&quot;4월 미활동 비율&quot;" />
+              <groupfilter function="member" level="[none:metric:nk]" member="&quot;관찰 기간 미활동 비율&quot;" />
             </groupfilter>
           </filter>
           <slices>
@@ -1557,7 +1557,7 @@ cart가 있으나 purchase가 없는 비율은 55.34%입니다. remove_from_cart
 실제 장바구니 제거 행동이나 미구매 원인, 회수 가능한 매출을 뜻하지 않습니다.
 
 KPI 분모: 구매 경험자는 전체 사용자, 반복 구매는 구매자(고유 구매일수 2일 이상),
-4월 미활동은 3/31 UTC까지 관측된 사용자입니다. 영구 이탈 확정치가 아닙니다.</run>
+관찰 기간 미활동 비율의 분모는 3/26 UTC까지 관측된 사용자이며, 결과 관찰 기간은 3/27~4/30입니다.</run>
           </formatted-text>
         </caption>
       </layout-options>

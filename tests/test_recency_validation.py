@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import copy
 import unittest
 
@@ -10,7 +11,10 @@ from src.ab_design import build_risk_population, summarize_risk
 
 class ValidationTest(unittest.TestCase):
     def setUp(self):
-        self.old = pd.DataFrame({'user_id': range(1, 9), 'recency_at_ref': [8, 9, 15, 20, 21, 22, 0, 182]})
+        patcher = patch("config.risk_bounds", return_value=(14, 34))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.old = pd.DataFrame({'user_id': range(1, 9), 'recency_at_ref': [8, 9, 15, 20, 21, 22, 0, 177]})
         self.labels = pd.DataFrame({'user_id': range(1, 9), 'status': ['retained', 'retained', 'retained', 'churned', 'retained', 'churned', 'churned', 'retained']})
         self.buyers = pd.DataFrame({'user_id': [3, 4], 'reference_date': [config.AB_REFERENCE_DATE] * 2})
         self.audit = {'parse_errors': 0, 'cutoff_excluded_rows': 0, 'input_changed': False,
@@ -18,9 +22,28 @@ class ValidationTest(unittest.TestCase):
 
     def validate(self, candidate, audit=None, synthetic=True):
         events = pd.DataFrame({'user_id': candidate.user_id,
-                               'event_time': [(pd.Timestamp('2020-03-31', tz='UTC') - pd.Timedelta(days=int(d))).isoformat() for d in candidate.recency_at_ref]})
+                               'event_time': [(pd.Timestamp('2020-03-26', tz='UTC') - pd.Timedelta(days=int(d))).isoformat() for d in candidate.recency_at_ref]})
         return validate_frames(self.old, candidate, self.labels, self.buyers,
                                candidate.user_id, events, audit or self.audit, synthetic_passed=synthetic)
+
+    def test_new_run_validates_without_legacy_population_or_approval(self):
+        events = pd.DataFrame({'user_id': self.old.user_id,
+                               'event_time': [(pd.Timestamp(config.AB_REFERENCE_DATE, tz='UTC') - pd.Timedelta(days=int(d))).isoformat() for d in self.old.recency_at_ref]})
+        report = validate_frames(None, self.old, self.labels, self.buyers,
+                                 self.old.user_id, events, self.audit, synthetic_passed=True)
+        self.assertEqual(report['decision_status'], 'pending_independent_review')
+        self.assertIsNone(report['decision_branch'])
+        self.assertIsNone(report['old_cache_checks'])
+        self.assertFalse(report['adopted'])
+        self.assertNotIn('old', report['daily_distributions'])
+        self.assertEqual(sum(r['users'] for r in report['daily_distributions']['candidate']),len(self.old))
+
+    def test_new_run_failure_does_not_produce_approved_distribution(self):
+        report = validate_frames(None, self.old, self.labels, self.buyers,
+                                 [1], pd.DataFrame({'user_id':[1],'event_time':['2020-03-27T00:00:00Z']}),
+                                 self.audit, synthetic_passed=True)
+        self.assertEqual(report['decision_status'], 'validation_failed')
+        self.assertNotIn('daily_distributions', report)
 
     def test_equal_distribution_with_user_swaps(self):
         candidate = self.old.copy()
@@ -36,7 +59,7 @@ class ValidationTest(unittest.TestCase):
 
     def test_cross_band_outside_risk_is_branch_three(self):
         candidate = self.old.copy()
-        candidate.loc[0, 'recency_at_ref'] = 30
+        candidate.loc[0, 'recency_at_ref'] = 35
         self.assertEqual(self.validate(candidate)['decision_branch'], 3)
 
     def test_synthetic_failure_holds_even_when_equal(self):
@@ -49,24 +72,24 @@ class ValidationTest(unittest.TestCase):
 
     def test_invalid_candidate_holds(self):
         candidate = self.old.copy()
-        candidate.loc[0, 'recency_at_ref'] = 183
+        candidate.loc[0, 'recency_at_ref'] = 178
         self.assertEqual(self.validate(candidate)['decision_branch'], 4)
 
     def test_invalid_old_rows_not_silently_lost(self):
         old = self.old.astype({'recency_at_ref': float})
-        old.loc[0:3, 'recency_at_ref'] = [float('nan'), -1, 0.5, 183]
-        dist = daily_distribution(old, self.labels, self.buyers.user_id, 182)
+        old.loc[0:3, 'recency_at_ref'] = [float('nan'), -1, 0.5, 178]
+        dist = daily_distribution(old, self.labels, self.buyers.user_id, 177)
         self.assertEqual(sum(r['users'] for r in dist), 8)
         self.assertEqual(sum(r['users'] for r in dist if r['recency_state'] != 'valid'), 4)
 
     def test_weighted_overall_not_average_of_rates(self):
-        intervals = [{'recency_band': '15-29', 'is_buyer_at_reference': True, 'users': 2, 'returned_users': 1},
-                     {'recency_band': '15-29', 'is_buyer_at_reference': False, 'users': 8, 'returned_users': 1}]
+        intervals = [{'recency_band': '14-34', 'is_buyer_at_reference': True, 'users': 2, 'returned_users': 1},
+                     {'recency_band': '14-34', 'is_buyer_at_reference': False, 'users': 8, 'returned_users': 1}]
         summary = risk_summary(intervals)
         self.assertEqual(summary[0]['baseline'], 0.2)
 
     def test_band_boundaries(self):
-        dist = [{'recency_at_ref': d, 'is_buyer_at_reference': False, 'april_active': True, 'users': 1, 'recency_state': 'valid'} for d in [0, 7, 8, 14, 15, 29, 30, 182]]
+        dist = [{'recency_at_ref': d, 'is_buyer_at_reference': False, 'outcome_active': True, 'users': 1, 'recency_state': 'valid'} for d in [0, 7, 8, 13, 14, 34, 35, 177]]
         self.assertEqual([r['users'] for r in interval_counts(dist) if not r['is_buyer_at_reference']], [2, 2, 2, 2])
 
     def test_legacy_summary_and_published_counts(self):
@@ -77,7 +100,7 @@ class ValidationTest(unittest.TestCase):
         self.assertFalse(published_matches(result, legacy))
 
     def test_sample_disagreement_holds(self):
-        events = pd.DataFrame({'user_id': [1], 'event_time': ['2020-03-31T00:00:00+00:00']})
+        events = pd.DataFrame({'user_id': [1], 'event_time': ['2020-03-26T00:00:00+00:00']})
         result = validate_frames(self.old, self.old, self.labels, self.buyers, [1], events, self.audit, synthetic_passed=True)
         self.assertEqual(result['decision_branch'], 4)
         self.assertEqual(result['checks']['c_sample']['mismatched_users'], 1)

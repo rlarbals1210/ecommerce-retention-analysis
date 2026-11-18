@@ -38,3 +38,9 @@ AGENTS.md
 !reports/recency_threshold_sensitivity.csv
 !reports/recency_threshold_sensitivity_tests.csv
 !reports/recency_threshold_sensitivity_thresholds.csv
+
+# Archived and current public aggregates.
+!reports/archive/n30_ref20200331/*.csv
+!reports/archive/n30_ref20200331/tableau/*.csv
+!reports/recency_day_outcome_comparison.csv
+!reports/recency28_support_comparison.csv

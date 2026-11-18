@@ -151,6 +151,12 @@ def scan_recency(paths, reference_date, sample_ids=(), chunksize=config.RECENCY_
         raise FileNotFoundError("Missing input files: " + ", ".join(missing))
     reference = utc_reference(reference_date)
     cutoff = reference + pd.Timedelta(days=1)
+    focus = reference - pd.Timedelta(days=28)
+    focus_days = [focus + pd.Timedelta(days=d) for d in range(-2, 3)]
+    focus_users = {d: set() for d in focus_days}
+    focus_counts = {d: 0 for d in focus_days}
+    focus_hours = {}
+    focus_ranges = {d: [None, None] for d in focus_days}
     accumulator = _Maxima()
     diagnostics, samples = [], []
     sample_ids = pd.Index(sample_ids, dtype="int64")
@@ -178,7 +184,22 @@ def scan_recency(paths, reference_date, sample_ids=(), chunksize=config.RECENCY_
                 selected["source_file"] = path.name
                 selected["source_row"] = np.flatnonzero(sampled) + row_offset + 1
                 samples.append(selected)
-            times = pd.to_datetime(chunk["event_time"], utc=True, format="mixed", errors="coerce")
+            try:
+                times = pd.to_datetime(chunk["event_time"], utc=True, errors="raise")
+            except ValueError:
+                times = pd.to_datetime(chunk["event_time"], utc=True, format="mixed", errors="coerce")
+            focus_mask = times.ge(focus_days[0]) & times.lt(focus_days[-1] + pd.Timedelta(days=1))
+            if focus_mask.any():
+                focus_frame = pd.DataFrame({"user_id": chunk.loc[focus_mask, "user_id"], "time": times.loc[focus_mask]})
+                focus_frame["day"] = focus_frame.time.dt.normalize()
+                for day, part in focus_frame.groupby("day"):
+                    focus_counts[day] += len(part)
+                    focus_users[day].update(map(int, part.user_id.unique()))
+                    lo, hi = part.time.min(), part.time.max()
+                    before_lo, before_hi = focus_ranges[day]
+                    focus_ranges[day] = [lo if before_lo is None else min(lo, before_lo), hi if before_hi is None else max(hi, before_hi)]
+                for hour, count in focus_frame.time.dt.floor("h").value_counts().items():
+                    focus_hours[hour] = focus_hours.get(hour, 0) + int(count)
             valid = times.notna()
             diag["rows"] += len(chunk)
             diag["parse_errors"] += int((~valid).sum())
@@ -224,6 +245,14 @@ def scan_recency(paths, reference_date, sample_ids=(), chunksize=config.RECENCY_
         "finished_at_utc": datetime.now(timezone.utc).isoformat(),
         "elapsed_seconds": round(time.monotonic() - started, 3),
         "pandas_version": pd.__version__, "numpy_version": np.__version__,
+        "recency28_raw_activity": {
+            "target_date": focus.date().isoformat(), "reference_date": reference.date().isoformat(),
+            "interpretation": "Raw activity on the last-activity date, not counts of users whose final pre-reference activity was that day.",
+            "days": [{"date": d.date().isoformat(), "event_rows": focus_counts[d], "unique_users": len(focus_users[d]),
+                      "min_time_utc": focus_ranges[d][0].isoformat() if focus_ranges[d][0] is not None else None,
+                      "max_time_utc": focus_ranges[d][1].isoformat() if focus_ranges[d][1] is not None else None,
+                      "hourly_event_rows": [{"hour_utc": (d + pd.Timedelta(hours=h)).isoformat(), "event_rows": focus_hours.get(d + pd.Timedelta(hours=h), 0)} for h in range(24)]} for d in focus_days]}
+
     }
     return recency, audit, events
 
@@ -287,7 +316,7 @@ def main():
     parser.add_argument("--chunksize", type=int, default=config.RECENCY_CHUNKSIZE)
     args = parser.parse_args()
     if args.action == "prepare":
-        result = prepare_sample(config.PROC_DIR / "churn_labels.parquet", args.run_dir)
+        result = prepare_sample(config.RUN_PROC_DIR / "churn_labels.parquet", args.run_dir)
     else:
         result = scan_prepared(args.run_dir, args.chunksize, progress=True)
     print(json.dumps(result, ensure_ascii=False, indent=2))
