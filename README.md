@@ -38,7 +38,7 @@
 | category_id | 카테고리 ID |
 | category_code | 카테고리 코드 (결측 32.2%, 01_eda 확인) |
 | brand | 브랜드 (결측 14.0%, 01_eda 확인) |
-| price | 가격 |
+| price | 상품 가격. 원본 데이터 설명에는 통화 단위가 명시돼 있지 않아 원본 값을 그대로 사용했다. |
 | user_id | 사용자 ID |
 | user_session | 세션 ID |
 
