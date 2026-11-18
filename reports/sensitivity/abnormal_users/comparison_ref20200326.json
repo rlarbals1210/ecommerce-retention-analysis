@@ -1,0 +1,639 @@
+{
+  "public_base": "ce81d18",
+  "reference_date": "2020-03-26",
+  "risk_range": [
+    14,
+    34
+  ],
+  "start_gate": {
+    "passed": true,
+    "first_stop_sha256": "009942493faac0f0850a1dd3c7a6e8ade6eac64dcc0f8434807086f23a6dc26a",
+    "membership_manifest_sha256": "590e96fcb5b4b4db6dd71d1812fccde534db0651c0301e0999c576ee5d0ae70e",
+    "files_sha256": {
+      "user_scores.parquet": "8466c7d031e13db51908cab98c6f88dbee6557228070ae5af4ad533b276ac0f1",
+      "scenario_membership.parquet": "35816ceac5ad594999a86c797d8d982e13583d2c1c96028d2165d9d4d83f8713",
+      "activity_day_cache_sha256": "1af88960ce123d8eb2e0230535b97ef53457c1ab0bd617a1ee2c35df0029b514",
+      "module_sha256": "4e71458ae2ae90f50cfd673351c5e1a641bc835c008d6e15b3cc75cb2aa99fc8"
+    },
+    "candidate_counts": {
+      "S1": 133466,
+      "S2": 13214,
+      "S3": 9818,
+      "S4": 21882
+    },
+    "reviewed_inputs_passed": true
+  },
+  "no_exclusion_gate": {
+    "passed": true,
+    "checks": {
+      "eligible_and_labels": true,
+      "recency_bands": true,
+      "risk_counts_and_sample_sizes": true,
+      "completed_gap_counts_and_quantiles": true
+    }
+  },
+  "quantile_method": "pandas Series.quantile(interpolation='linear')",
+  "gap_definition": "Days between consecutive observed UTC activity dates for a user",
+  "pre_gap_definition": "Both dates on or before the UTC reference date",
+  "user_quantile_definition": "p90 of each user's median completed gap, including one-gap users",
+  "sample_size_method": {
+    "effect": "Cohen's h",
+    "solver": "statsmodels NormalIndPower",
+    "alpha": 0.05,
+    "power": 0.8,
+    "ratio": 1,
+    "alternative": "two-sided",
+    "target_increment": 0.05,
+    "rounding": "ceil"
+  },
+  "limitations": [
+    "봇 여부를 알려 주는 정답 라벨이 없다.",
+    "B는 자동화·중복 기록·수집 방식을 구분하지 못하고 활동량과 연관된다. 사전 활동일 중앙값은 S3 14일, 전체 2일이다.",
+    "기준일 이후 처음 관측된 2,291,827명은 판정 대상에서 제외했으며 전체 기간 간격 집계에는 남겼다.",
+    "동일 행 중복은 검사하지 않았다.",
+    "1차 스캔의 대체 형식 파싱 행 수는 기록되지 않았다. 파싱 오류는 0건이었다.",
+    "1차 스캔의 월 간 합계·최댓값 결합은 코드 검토로 확인했다. 이 결합의 단위 테스트는 없다."
+  ],
+  "scenarios": {
+    "S0": {
+      "cohort": {
+        "eligible_users": 13347976,
+        "status_counts": {
+          "churned": 10838810,
+          "retained": 2509166,
+          "censored": 2291827
+        },
+        "inactivity_rate": 0.8120189907443646,
+        "recency_bands": {
+          "0-7": {
+            "users": 1158712,
+            "returned_users": 680047,
+            "return_rate": 0.5868990741443948,
+            "return_delta_pp": 0.0
+          },
+          "8-13": {
+            "users": 634624,
+            "returned_users": 269894,
+            "return_rate": 0.4252817416296894,
+            "return_delta_pp": 0.0
+          },
+          "14-34": {
+            "users": 2852344,
+            "returned_users": 726061,
+            "return_rate": 0.25454889031617506,
+            "return_delta_pp": 0.0
+          },
+          "35+": {
+            "users": 8702296,
+            "returned_users": 833164,
+            "return_rate": 0.09574071026772704,
+            "return_delta_pp": 0.0
+          }
+        },
+        "risk": {
+          "overall": {
+            "segment": "overall",
+            "users": 2852344,
+            "returned_users": 726061,
+            "baseline": 0.25454889031617506,
+            "target": 0.30454889031617505,
+            "n_per_arm": 1263,
+            "n_total": 2526,
+            "return_delta_pp": 0.0,
+            "sample_size_delta": 0
+          },
+          "buyer_before_reference": {
+            "segment": "buyer_before_reference",
+            "users": 376467,
+            "returned_users": 161770,
+            "baseline": 0.4297056581320541,
+            "target": 0.47970565813205407,
+            "n_per_arm": 1556,
+            "n_total": 3112,
+            "return_delta_pp": 0.0,
+            "sample_size_delta": 0
+          },
+          "nonbuyer_before_reference": {
+            "segment": "nonbuyer_before_reference",
+            "users": 2475877,
+            "returned_users": 564291,
+            "baseline": 0.22791560323877155,
+            "target": 0.27791560323877157,
+            "n_per_arm": 1184,
+            "n_total": 2368,
+            "return_delta_pp": 0.0,
+            "sample_size_delta": 0
+          }
+        },
+        "inactivity_delta_pp": 0.0
+      },
+      "completed_gaps": {
+        "full": {
+          "gap_count": 44588010,
+          "p75": 14.0,
+          "p90": 35.0,
+          "p95": 55.0,
+          "excluded_gaps": 0,
+          "excluded_gap_share": 0.0,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        },
+        "pre": {
+          "gap_count": 36655640,
+          "p75": 13.0,
+          "p90": 31.0,
+          "p95": 48.0,
+          "excluded_gaps": 0,
+          "excluded_gap_share": 0.0,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        }
+      },
+      "user_median_gaps": {
+        "full": {
+          "contributing_users": 7936486,
+          "one_gap_users": 2478959,
+          "one_gap_share": 0.3123496973345634,
+          "p90": 51.0
+        },
+        "pre": {
+          "contributing_users": 6797358,
+          "one_gap_users": 2133715,
+          "one_gap_share": 0.3139035784197331,
+          "p90": 44.5
+        }
+      },
+      "pre_p75_changed": false
+    },
+    "S1": {
+      "cohort": {
+        "eligible_users": 13214510,
+        "status_counts": {
+          "churned": 10730833,
+          "retained": 2483677,
+          "censored": 2291827
+        },
+        "inactivity_rate": 0.8120492549477809,
+        "recency_bands": {
+          "0-7": {
+            "users": 1144175,
+            "returned_users": 670161,
+            "return_rate": 0.585715471846527,
+            "return_delta_pp": -0.11836022978678473
+          },
+          "8-13": {
+            "users": 628170,
+            "returned_users": 267125,
+            "return_rate": 0.42524316665870704,
+            "return_delta_pp": -0.003857497098236351
+          },
+          "14-34": {
+            "users": 2830510,
+            "returned_users": 720240,
+            "return_rate": 0.25445591077226365,
+            "return_delta_pp": -0.009297954391140895
+          },
+          "35+": {
+            "users": 8611655,
+            "returned_users": 826151,
+            "return_rate": 0.09593405681021824,
+            "return_delta_pp": 0.019334654249120176
+          }
+        },
+        "risk": {
+          "overall": {
+            "segment": "overall",
+            "users": 2830510,
+            "returned_users": 720240,
+            "baseline": 0.25445591077226365,
+            "target": 0.30445591077226364,
+            "n_per_arm": 1263,
+            "n_total": 2526,
+            "return_delta_pp": -0.009297954391140895,
+            "sample_size_delta": 0
+          },
+          "buyer_before_reference": {
+            "segment": "buyer_before_reference",
+            "users": 369608,
+            "returned_users": 159426,
+            "baseline": 0.4313380662756217,
+            "target": 0.4813380662756217,
+            "n_per_arm": 1557,
+            "n_total": 3114,
+            "return_delta_pp": 0.1632408143567632,
+            "sample_size_delta": 1
+          },
+          "nonbuyer_before_reference": {
+            "segment": "nonbuyer_before_reference",
+            "users": 2460902,
+            "returned_users": 560814,
+            "baseline": 0.22788961120759788,
+            "target": 0.27788961120759786,
+            "n_per_arm": 1184,
+            "n_total": 2368,
+            "return_delta_pp": -0.002599203117367721,
+            "sample_size_delta": 0
+          }
+        },
+        "inactivity_delta_pp": 0.0030264203416341395
+      },
+      "completed_gaps": {
+        "full": {
+          "gap_count": 44031297,
+          "p75": 14.0,
+          "p90": 35.0,
+          "p95": 55.0,
+          "excluded_gaps": 556713,
+          "excluded_gap_share": 0.012485710844686722,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        },
+        "pre": {
+          "gap_count": 36195968,
+          "p75": 13.0,
+          "p90": 31.0,
+          "p95": 48.0,
+          "excluded_gaps": 459672,
+          "excluded_gap_share": 0.012540280295201503,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        }
+      },
+      "user_median_gaps": {
+        "full": {
+          "contributing_users": 7868343,
+          "one_gap_users": 2460092,
+          "one_gap_share": 0.31265693424905344,
+          "p90": 51.0
+        },
+        "pre": {
+          "contributing_users": 6736010,
+          "one_gap_users": 2114869,
+          "one_gap_share": 0.3139646467270684,
+          "p90": 45.0
+        }
+      },
+      "pre_p75_changed": false
+    },
+    "S2": {
+      "cohort": {
+        "eligible_users": 13334762,
+        "status_counts": {
+          "churned": 10826354,
+          "retained": 2508408,
+          "censored": 2291827
+        },
+        "inactivity_rate": 0.811889556034071,
+        "recency_bands": {
+          "0-7": {
+            "users": 1158234,
+            "returned_users": 679731,
+            "return_rate": 0.5868684566331156,
+            "return_delta_pp": -0.003061751127919621
+          },
+          "8-13": {
+            "users": 634214,
+            "returned_users": 269835,
+            "return_rate": 0.42546364476343945,
+            "return_delta_pp": 0.018190313375004985
+          },
+          "14-34": {
+            "users": 2850415,
+            "returned_users": 725894,
+            "return_rate": 0.2546625666788871,
+            "return_delta_pp": 0.011367636271203407
+          },
+          "35+": {
+            "users": 8691899,
+            "returned_users": 832948,
+            "return_rate": 0.09583038183025366,
+            "return_delta_pp": 0.0089671562526622
+          }
+        },
+        "risk": {
+          "overall": {
+            "segment": "overall",
+            "users": 2850415,
+            "returned_users": 725894,
+            "baseline": 0.2546625666788871,
+            "target": 0.3046625666788871,
+            "n_per_arm": 1263,
+            "n_total": 2526,
+            "return_delta_pp": 0.011367636271203407,
+            "sample_size_delta": 0
+          },
+          "buyer_before_reference": {
+            "segment": "buyer_before_reference",
+            "users": 376251,
+            "returned_users": 161725,
+            "baseline": 0.4298327446305791,
+            "target": 0.47983274463057907,
+            "n_per_arm": 1556,
+            "n_total": 3112,
+            "return_delta_pp": 0.012708649852499754,
+            "sample_size_delta": 0
+          },
+          "nonbuyer_before_reference": {
+            "segment": "nonbuyer_before_reference",
+            "users": 2474164,
+            "returned_users": 564169,
+            "baseline": 0.22802409217820646,
+            "target": 0.27802409217820645,
+            "n_per_arm": 1185,
+            "n_total": 2370,
+            "return_delta_pp": 0.010848893943490867,
+            "sample_size_delta": 1
+          }
+        },
+        "inactivity_delta_pp": -0.012943471029358555
+      },
+      "completed_gaps": {
+        "full": {
+          "gap_count": 44572172,
+          "p75": 14.0,
+          "p90": 35.0,
+          "p95": 55.0,
+          "excluded_gaps": 15838,
+          "excluded_gap_share": 0.00035520759953180237,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        },
+        "pre": {
+          "gap_count": 36643544,
+          "p75": 13.0,
+          "p90": 31.0,
+          "p95": 48.0,
+          "excluded_gaps": 12096,
+          "excluded_gap_share": 0.0003299901461275809,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        }
+      },
+      "user_median_gaps": {
+        "full": {
+          "contributing_users": 7934439,
+          "one_gap_users": 2478183,
+          "one_gap_share": 0.31233247870454356,
+          "p90": 51.0
+        },
+        "pre": {
+          "contributing_users": 6795659,
+          "one_gap_users": 2132962,
+          "one_gap_share": 0.3138712522214549,
+          "p90": 44.5
+        }
+      },
+      "pre_p75_changed": false
+    },
+    "S3": {
+      "cohort": {
+        "eligible_users": 13338158,
+        "status_counts": {
+          "churned": 10833586,
+          "retained": 2504572,
+          "censored": 2291827
+        },
+        "inactivity_rate": 0.8122250463669721,
+        "recency_bands": {
+          "0-7": {
+            "users": 1155701,
+            "returned_users": 677396,
+            "return_rate": 0.5861343029036057,
+            "return_delta_pp": -0.07647712407891083
+          },
+          "8-13": {
+            "users": 633668,
+            "returned_users": 269238,
+            "return_rate": 0.4248881117556828,
+            "return_delta_pp": -0.03936298740065958
+          },
+          "14-34": {
+            "users": 2850358,
+            "returned_users": 725148,
+            "return_rate": 0.25440593778044723,
+            "return_delta_pp": -0.014295253572782496
+          },
+          "35+": {
+            "users": 8698431,
+            "returned_users": 832790,
+            "return_rate": 0.09574025476548587,
+            "return_delta_pp": -4.5550224117563154e-05
+          }
+        },
+        "risk": {
+          "overall": {
+            "segment": "overall",
+            "users": 2850358,
+            "returned_users": 725148,
+            "baseline": 0.25440593778044723,
+            "target": 0.3044059377804472,
+            "n_per_arm": 1262,
+            "n_total": 2524,
+            "return_delta_pp": -0.014295253572782496,
+            "sample_size_delta": -1
+          },
+          "buyer_before_reference": {
+            "segment": "buyer_before_reference",
+            "users": 374898,
+            "returned_users": 160989,
+            "baseline": 0.42942080245826864,
+            "target": 0.4794208024582686,
+            "n_per_arm": 1556,
+            "n_total": 3112,
+            "return_delta_pp": -0.028485567378544463,
+            "sample_size_delta": 0
+          },
+          "nonbuyer_before_reference": {
+            "segment": "nonbuyer_before_reference",
+            "users": 2475460,
+            "returned_users": 564159,
+            "baseline": 0.22790067300622915,
+            "target": 0.27790067300622917,
+            "n_per_arm": 1184,
+            "n_total": 2368,
+            "return_delta_pp": -0.0014930232542398336,
+            "sample_size_delta": 0
+          }
+        },
+        "inactivity_delta_pp": 0.02060556226075594
+      },
+      "completed_gaps": {
+        "full": {
+          "gap_count": 44341862,
+          "p75": 14.0,
+          "p90": 35.0,
+          "p95": 55.0,
+          "excluded_gaps": 246148,
+          "excluded_gap_share": 0.005520497550798971,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        },
+        "pre": {
+          "gap_count": 36436477,
+          "p75": 13.0,
+          "p90": 31.0,
+          "p95": 48.0,
+          "excluded_gaps": 219163,
+          "excluded_gap_share": 0.005978970766845157,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        }
+      },
+      "user_median_gaps": {
+        "full": {
+          "contributing_users": 7928654,
+          "one_gap_users": 2478664,
+          "one_gap_share": 0.3126210325233009,
+          "p90": 51.0
+        },
+        "pre": {
+          "contributing_users": 6789559,
+          "one_gap_users": 2133385,
+          "one_gap_share": 0.3142155477255592,
+          "p90": 44.5
+        }
+      },
+      "pre_p75_changed": false
+    },
+    "S4": {
+      "cohort": {
+        "eligible_users": 13326094,
+        "status_counts": {
+          "churned": 10822256,
+          "retained": 2503838,
+          "censored": 2291827
+        },
+        "inactivity_rate": 0.8121101351979058,
+        "recency_bands": {
+          "0-7": {
+            "users": 1155246,
+            "returned_users": 677095,
+            "return_rate": 0.586104604560414,
+            "return_delta_pp": -0.07944695839807725
+          },
+          "8-13": {
+            "users": 633264,
+            "returned_users": 269179,
+            "return_rate": 0.4250660072260542,
+            "return_delta_pp": -0.02157344036352038
+          },
+          "14-34": {
+            "users": 2848479,
+            "returned_users": 724987,
+            "return_rate": 0.25451723533857895,
+            "return_delta_pp": -0.0031654977596107248
+          },
+          "35+": {
+            "users": 8689105,
+            "returned_users": 832577,
+            "return_rate": 0.0958184991434676,
+            "return_delta_pp": 0.0077788875740558705
+          }
+        },
+        "risk": {
+          "overall": {
+            "segment": "overall",
+            "users": 2848479,
+            "returned_users": 724987,
+            "baseline": 0.25451723533857895,
+            "target": 0.30451723533857894,
+            "n_per_arm": 1263,
+            "n_total": 2526,
+            "return_delta_pp": -0.0031654977596107248,
+            "sample_size_delta": 0
+          },
+          "buyer_before_reference": {
+            "segment": "buyer_before_reference",
+            "users": 374697,
+            "returned_users": 160947,
+            "baseline": 0.4295390675665938,
+            "target": 0.4795390675665938,
+            "n_per_arm": 1556,
+            "n_total": 3112,
+            "return_delta_pp": -0.01665905654602562,
+            "sample_size_delta": 0
+          },
+          "nonbuyer_before_reference": {
+            "segment": "nonbuyer_before_reference",
+            "users": 2473782,
+            "returned_users": 564040,
+            "baseline": 0.228007156653254,
+            "target": 0.278007156653254,
+            "n_per_arm": 1185,
+            "n_total": 2370,
+            "return_delta_pp": 0.009155341448244259,
+            "sample_size_delta": 1
+          }
+        },
+        "inactivity_delta_pp": 0.009114445354119205
+      },
+      "completed_gaps": {
+        "full": {
+          "gap_count": 44327927,
+          "p75": 14.0,
+          "p90": 35.0,
+          "p95": 55.0,
+          "excluded_gaps": 260083,
+          "excluded_gap_share": 0.005833025515155308,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        },
+        "pre": {
+          "gap_count": 36426001,
+          "p75": 13.0,
+          "p90": 31.0,
+          "p95": 48.0,
+          "excluded_gaps": 229639,
+          "excluded_gap_share": 0.006264765804116365,
+          "delta_days": {
+            "p75": 0.0,
+            "p90": 0.0,
+            "p95": 0.0
+          }
+        }
+      },
+      "user_median_gaps": {
+        "full": {
+          "contributing_users": 7926694,
+          "one_gap_users": 2477923,
+          "one_gap_share": 0.3126048514046335,
+          "p90": 51.0
+        },
+        "pre": {
+          "contributing_users": 6787941,
+          "one_gap_users": 2132664,
+          "one_gap_share": 0.314184227588307,
+          "p90": 44.5
+        }
+      },
+      "pre_p75_changed": false
+    }
+  }
+}
